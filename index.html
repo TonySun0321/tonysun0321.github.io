@@ -121,12 +121,12 @@
     </script>
 
     <style>
-        :root { --mtr-red: #c0392b; --mtr-blue: #2980b9; --mtr-green: #27ae60; --mtr-dark: #34495e; --mtr-yellow: #f1c40f; }
+        :root { --mtr-red: #c0392b; --mtr-blue: #2980b9; --mtr-green: #27ae60; --mtr-dark: #000000; --mtr-yellow: #f1c40f; }
         body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 20px; }
         
         /* Header 背景改為 none */
         .header { 
-            background: none; 
+            background: #ffffff; 
             color: var(--mtr-dark); 
             padding: 15px; 
             text-align: center; 
@@ -141,7 +141,7 @@
         
         /* 登入按鈕樣式調整以適應透明背景 */
         #loginBtn { 
-            background: var(--mtr-red); 
+            background: var(--mtr-dark); 
             border: none; 
             color: white; 
             padding: 6px 12px; 
@@ -152,7 +152,7 @@
 
         .tabs { display: flex; background: white; border-bottom: 2px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab-btn { flex: 1; padding: 15px; border: none; background: white; font-weight: bold; color: #7f8c8d; cursor: pointer; }
-        .tab-btn.active { color: var(--mtr-red); border-bottom: 4px solid var(--mtr-red); }
+        .tab-btn.active { color: var(--mtr-black); border-bottom: 4px solid var(--mtr-black); }
         .container { max-width: 600px; margin: auto; padding: 10px; }
         .report-form { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
         .form-row { display: flex; gap: 8px; margin-bottom: 10px; }
