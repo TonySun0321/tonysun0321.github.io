@@ -130,7 +130,7 @@
 
             const hasPhase1 = carIds.some(id => parseInt(id) >= 1001 && parseInt(id) <= 1090);
             if (hasPhase1 && newTrace.rteKey === "705") {
-                if (!confirm("提示：一期車 (1001-1090) 絕少行走 705 路綫，請確認相關行蹤報道是否正確？")) return;
+                if (!confirm("提示：請確認相關行蹤報道是否正確？")) return;
             }
 
             const now = Date.now();
@@ -163,11 +163,24 @@
             });
         };
 
-        window.toggleFav = (id) => {
-            if (!window.user) return alert("請先登入以儲存收藏");
+        window.toggleFav = (id, event) => {
+            if(event) event.stopPropagation();
+            if (!window.user) return alert("請先登入以儲存編組");
             if (window.favorites.has(id)) window.favorites.delete(id);
             else window.favorites.add(id);
             set(ref(db, `users/${window.user.uid}/favs`), Array.from(window.favorites));
+        };
+
+        window.toggleCollapse = (id) => {
+            const body = document.getElementById(`body-${id}`);
+            const arrow = document.getElementById(`arrow-${id}`);
+            if (body.style.display === "none") {
+                body.style.display = "block";
+                arrow.style.transform = "rotate(180deg)";
+            } else {
+                body.style.display = "none";
+                arrow.style.transform = "rotate(0deg)";
+            }
         };
 
         window.renderAll = function() {
@@ -196,6 +209,7 @@
                 const latest = comp.traces[0];
                 const hex = colorMap[latest.rteKey?.split('x')[0]] || "#333";
                 const carIds = comp.fid.split('-');
+                const cleanId = comp.fid.replace(/[^a-zA-Z0-9]/g, ''); 
                 
                 let specialBadgesHTML = "";
                 if (showDesc) {
@@ -208,23 +222,31 @@
 
                 const carLinks = carIds.map(c => {
                     const icon = specialIcons[c] || "";
-                    return `<span class="car-link" onclick="showCarHistory('${c}')">${icon}${c}</span>`;
+                    return `<span class="car-link" onclick="event.stopPropagation(); showCarHistory('${c}')">${icon}${c}</span>`;
                 }).join('-');
                 
                 const isFav = window.favorites.has(comp.fid);
                 return `
                 <div class="timeline-card" style="border-left-color:${hex}">
-                    <div class="timeline-header">
-                        <b class="car-group-title" style="color:${hex};">${carLinks}</b>
-                        <span onclick="toggleFav('${comp.fid}')" style="cursor:pointer; color:${isFav?'#f1c40f':'#ccc'}">★</span>
+                    <div class="timeline-header" onclick="toggleCollapse('${cleanId}')">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span id="arrow-${cleanId}" class="collapse-arrow">▼</span>
+                            <b class="car-group-title" style="color:${hex};">${carLinks}</b>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="run-no-badge">${latest.rno}</span>
+                            <span class="route-badge" style="background:${colorMap[latest.rteKey?.split('x')[0]] || '#333'}">${latest.dRte}</span>
+                            <span onclick="toggleFav('${comp.fid}', event)" style="cursor:pointer; color:${isFav?'#f1c40f':'#ccc'}; font-size:1.2em;">★</span>
+                        </div>
                     </div>
                     ${specialBadgesHTML ? `<div class="special-badge-area">${specialBadgesHTML}</div>` : ''}
-                    <div class="timeline-body">
+                    <div id="body-${cleanId}" class="timeline-body" style="display:none; padding-top:10px;">
+                        <div style="padding: 0 15px 10px 15px; color: #666; font-size: 0.85em;">最新位置：<b>${latest.loc}</b> (${latest.tStr})</div>
                         ${comp.traces.slice(0, 5).map((t, idx) => `
                             <div class="trace-item ${idx===0?'latest':''}">
                                 <div style="display:flex; justify-content:space-between;">
                                     <div><span class="run-no-badge">${t.rno}</span><span class="route-badge" style="background:${colorMap[t.rteKey?.split('x')[0]] || '#333'}">${t.dRte}</span><b> ${t.loc}</b></div>
-                                    <small>${t.tStr}${window.isAdmin ? `<span class="del-btn" onclick="deleteTrace('${comp.fid.split('-')[0]}', ${t.timestamp})">刪除</span>` : ''}</small>
+                                    <small>${t.tStr}${window.isAdmin ? `<span class="del-btn" onclick="event.stopPropagation(); deleteTrace('${comp.fid.split('-')[0]}', ${t.timestamp})">刪除</span>` : ''}</small>
                                 </div>
                                 ${t.mem ? `<div style="color:orange; font-size:0.85em; margin-top:3px;">📝 ${t.mem}</div>` : ''}
                             </div>`).join('')}
@@ -232,7 +254,6 @@
                 </div>`;
             };
 
-            // 渲染行蹤頁
             const filteredLive = sortedComps.filter(comp => {
                 const latest = comp.traces[0];
                 const matchesRoute = !searchRoute || latest.rteKey === searchRoute || latest.rteKey.startsWith(searchRoute + 'x');
@@ -241,11 +262,9 @@
             });
             mList.innerHTML = filteredLive.map(c => buildHTML(c, false)).join('') || "<div style='text-align:center; padding:20px; color:grey;'>找不到符合條件的行蹤</div>";
 
-            // 渲染閃卡頁
             const flashComps = sortedComps.filter(comp => comp.fid.split('-').some(id => specialIcons[id]));
-            document.getElementById('flashList').innerHTML = flashComps.map(c => buildHTML(c, true)).join('') || "<div style='text-align:center; padding:20px; color:grey;'>目前沒有特別列車正在行駛</div>";
+            document.getElementById('flashList').innerHTML = flashComps.map(c => buildHTML(c, true)).join('') || "<div style='text-align:center; padding:20px; color:grey;'>目前沒有特別列車的相關行蹤報告</div>";
 
-            // 渲染「報導」主頁下方的收藏列表
             const favArea = document.getElementById('favListOnMain');
             if (window.user) {
                 const favComps = sortedComps.filter(c => window.favorites.has(c.fid));
@@ -294,19 +313,26 @@
         .search-bar input, .search-bar select { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: white; }
 
         .timeline-card { background: white; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.08); border-left: 6px solid var(--mtr-dark); }
-        .timeline-header { padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
+        .timeline-header { padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
+        .timeline-header:hover { background: #f0f2f5; }
+        .collapse-arrow { font-size: 0.7em; color: #999; transition: transform 0.3s; }
+        
         .special-badge-area { padding: 8px 15px; background: #fffdf0; border-bottom: 1px solid #ffe58f; }
         .special-desc-item { font-size: 0.85em; color: #856404; font-weight: 500; }
-        .car-group-title { font-weight: bold; font-size: 1.3em; font-family: "Helvetica Neue", Arial, sans-serif; }
-        .trace-item { padding: 8px 0; border-left: 2px solid #ddd; margin-left: 10px; padding-left: 15px; position: relative; }
+        .car-group-title { font-weight: bold; font-size: 1.1em; font-family: "Helvetica Neue", Arial, sans-serif; }
+        
+        .timeline-body { border-top: 1px dashed #eee; }
+        .trace-item { padding: 8px 0; border-left: 2px solid #ddd; margin-left: 25px; padding-left: 15px; position: relative; }
         .trace-item::before { content: ""; width: 8px; height: 8px; background: #bbb; border-radius: 50%; position: absolute; left: -5px; top: 15px; }
         .trace-item.latest { border-left-color: var(--mtr-green); }
         .trace-item.latest::before { background: var(--mtr-green); }
-        .route-badge { padding: 2px 6px; border-radius: 4px; color: white; font-size: 0.85em; font-weight: bold; }
+        
+        .route-badge { padding: 2px 6px; border-radius: 4px; color: white; font-size: 0.85em; font-weight: bold; white-space: nowrap; }
         .run-no-badge { background: #222; color: #f1c40f; padding: 2px 5px; border-radius: 4px; font-family: monospace; font-size: 0.85em; margin-right: 5px; font-weight: bold; }
+        
         .page { display: none; } .page.active { display: block; }
         #detailOverlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f2f5; z-index: 1000; display: none; overflow-y: auto; padding: 20px; }
-        .car-link { cursor: pointer; margin: 0 2px; }
+        .car-link { cursor: pointer; margin: 0 2px; text-decoration: underline; text-decoration-style: dotted; }
         .del-btn { color: #e74c3c; font-size: 0.8em; cursor: pointer; margin-left: 10px; border: 1px solid #e74c3c; padding: 1px 4px; border-radius: 4px; }
 
         .report-form { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
@@ -321,7 +347,7 @@
 
 <div class="header">
     <div id="adminStatus"></div>
-    <span>輕鐵行蹤</span>
+    <span>LRSpotter</span>
     <button id="loginBtn">載入中...</button>
 </div>
 
@@ -353,26 +379,21 @@
         </div>
 
         <div class="section-title">監察列表</div>
-		<div style="background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85em; border: 1px solid #ffeeba;">
-        ⚠️ 此網站所有行蹤只作測試，並非即時報告。
-    </div>
         <div id="favListOnMain"></div>
-		
     </div>
 
     <div id="livePage" class="page">
-    <div style="background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85em; border: 1px solid #ffeeba;">
-        ⚠️ 此網站所有行蹤只作測試，並非即時報告。
+        <div style="background: #fff3cd; color: #856404; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 0.85em; border: 1px solid #ffeeba;">
+            ⚠️ 此網站所有行蹤只作測試，並非即時報告。
+        </div>
+        <div class="search-bar">
+            <select id="searchRoute" onchange="renderAll()">
+                <option value="">所有路綫</option>
+            </select>
+            <input type="text" id="searchComp" placeholder="搜尋編組 (如: 1066)" oninput="renderAll()">
+        </div>
+        <div id="masterList">同步中...</div>
     </div>
-    
-    <div class="search-bar">
-        <select id="searchRoute" onchange="renderAll()">
-            <option value="">所有路綫</option>
-        </select>
-        <input type="text" id="searchComp" placeholder="搜尋編組 (如: 1066)" oninput="renderAll()">
-    </div>
-    <div id="masterList">同步中...</div>
-</div>
 
     <div id="flashPage" class="page">
         <div style="background: #e1f5fe; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 0.85em; color: #0277bd;">
@@ -420,7 +441,15 @@ function checkRunNo() {
 function applySuggestion() {
     const rno = document.getElementById('runNo').value;
     if (rno === "903") {
-        document.getElementById('routeSelect').value = "751L";
+        // 特別處理：動態顯示 751L 並自動選取
+        const rs = document.getElementById('routeSelect');
+        if (![...rs.options].some(o => o.value === "751L")) {
+            const opt = document.createElement('option');
+            opt.value = "751L";
+            opt.innerText = "751L";
+            rs.appendChild(opt);
+        }
+        rs.value = "751L";
         window.customRteKey = "751L";
         document.getElementById('directionSelect').innerHTML = `<option>屯門碼頭</option>`;
         document.getElementById('memo').value = specialTips[rno];
@@ -442,6 +471,7 @@ function applySuggestion() {
 
 function onRouteUpdate() {
     const r = document.getElementById('routeSelect').value;
+    window.customRteKey = null; // 切換路由時清除手動 Key
     document.getElementById('directionSelect').innerHTML = routeCfg[r].map(d => `<option>${d}</option>`).join('');
     const list = stationDB.filter(s => s.r.includes(r)).sort((a,b)=>a.id-b.id);
     document.getElementById('stationSelect').innerHTML = list.map(s => `<option value="${s.zh}">${s.id} ${s.zh}</option>`).join('');
@@ -470,9 +500,13 @@ window.onload = () => {
     const rs = document.getElementById('routeSelect');
     const srs = document.getElementById('searchRoute');
     Object.keys(routeCfg).sort().forEach(r => {
-        const opt = `<option value="${r}">${r}</option>`;
-        rs.innerHTML += opt;
-        srs.innerHTML += opt;
+        // 如果是 751L，則不加入報道的下拉選單 (但保留在搜尋選單)
+        if (r !== "751L") {
+            const opt = `<option value="${r}">${r}</option>`;
+            rs.innerHTML += opt;
+        }
+        const sOpt = `<option value="${r}">${r}</option>`;
+        srs.innerHTML += sOpt;
     });
     onRouteUpdate();
 };
