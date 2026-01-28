@@ -400,12 +400,13 @@
     </div>
 
     <div id="etaPage" class="page">
-        <div class="search-bar">
-            <select id="etaStationSelect" onchange="updateETAList()" style="flex: 2;"></select>
-            <button onclick="updateETAList()" style="padding: 0 15px; border-radius: 6px; border: 1px solid #ddd; background: white; cursor: pointer;">刷新</button>
-        </div>
-        <div id="etaList">請選擇車站以查看即時班次</div>
+    <div class="search-bar">
+        <input type="number" id="etaStationInput" placeholder="編號" style="flex: 0.5;" oninput="syncETAList('input')">
+        <select id="etaStationSelect" onchange="syncETAList('select')" style="flex: 2;"></select>
+        <button onclick="updateETAList()" style="padding: 0 15px; border-radius: 6px; border: 1px solid #ddd; background: white; cursor: pointer;">刷新</button>
     </div>
+    <div id="etaList">請輸入或選擇車站以查看即時班次</div>
+</div>
 </div>
 
 <div id="detailOverlay">
@@ -522,10 +523,34 @@ function initETAStations() {
     });
 }
 
-/* --- ETA Page Logic (顯示模式調整版) --- */
+/* --- ETA 分頁強化邏輯 --- */
+
+// 同步輸入框與下拉選單 (支援前導零處理)
+window.syncETAList = function(source) {
+    const input = document.getElementById('etaStationInput');
+    const select = document.getElementById('etaStationSelect');
+    
+    if (source === 'input') {
+        // 將輸入的字串轉換為整數，例如 "001" -> 1, "010" -> 10
+        const val = parseInt(input.value);
+        if (!isNaN(val)) {
+            select.value = val;
+        }
+    } else {
+        // 從選單同步回輸入框時，保持原始 ID 顯示
+        input.value = select.value;
+    }
+    
+    // 如果成功選擇了車站，則觸發更新
+    if (select.value) {
+        updateETAList();
+    }
+};
+
 window.etaTimer = null;
 
 async function updateETAList() {
+    // 清除舊計時器
     if (window.etaTimer) {
         clearTimeout(window.etaTimer);
         window.etaTimer = null;
@@ -542,9 +567,9 @@ async function updateETAList() {
         if (data && data.platform_list) {
             let html = "";
             
-            // 建立 [車序 -> 編組] 對照表
+            // 建立行蹤編組對照表 (從全局 reportGroups 獲取)
             const runToCompMap = {};
-            Object.values(window.reportGroups).forEach(group => {
+            Object.values(window.reportGroups || {}).forEach(group => {
                 if (group.traces && group.traces.length > 0) {
                     const latest = group.traces[0];
                     const rnoKey = parseInt(latest.rno).toString(); 
@@ -568,7 +593,6 @@ async function updateETAList() {
                             runNo = raw.substring(0, raw.length - 2);
                             const cleanRunNo = parseInt(runNo).toString();
                             if (runToCompMap[cleanRunNo]) {
-                                // 將匹配到的編組放在目的地/卡數之後
                                 matchedComp = `<span style="margin-left:5px; color:#2980b9; font-weight:bold; font-size:0.85em;">(${runToCompMap[cleanRunNo]})</span>`;
                             }
                         } else if (raw) {
@@ -577,10 +601,10 @@ async function updateETAList() {
 
                         const timeDiff = train.time_ch || "---";
                         const isApproaching = train.time_en === 'Arriving' || parseInt(train.time_en) <= 1;
-                        const carIcon = train.train_length === 2 ? " [2]" : " [1]"; // 顯示列車卡數
+                        const carIcon = train.train_length === 2 ? " [2]" : " [1]";
                         const routeColor = colorMap[train.route_no] || '#333';
                         
-                        // 依照新模式排列：車序 路線 目的地+卡數+編組 分鐘
+                        // 依照要求格式：車序 路線編號 目的地 列車卡數 (編組) 分鐘
                         html += `
                         <div class="eta-item">
                             <div style="display:flex; align-items:center; gap:8px; overflow: hidden; flex: 1;">
@@ -601,11 +625,11 @@ async function updateETAList() {
         }
     } catch (error) {
         console.error("Fetch Error:", error);
-        listArea.innerHTML = "<div style='text-align:center; padding:20px; color:grey;'>網絡錯誤或數據異常。</div>";
     }
 
+    // 10秒自動刷新（僅在到站時間頁面活動時）
     if (document.getElementById('etaPage').classList.contains('active')) {
-        window.etaTimer = setTimeout(updateETAList, 10000); // 10秒自動刷新
+        window.etaTimer = setTimeout(updateETAList, 10000);
     }
 }
 
