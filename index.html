@@ -522,68 +522,90 @@ function initETAStations() {
     });
 }
 
-/* --- ETA Page Logic (終極修正版) --- */
+/* --- ETA Page Logic (顯示模式調整版) --- */
+window.etaTimer = null;
+
 async function updateETAList() {
+    if (window.etaTimer) {
+        clearTimeout(window.etaTimer);
+        window.etaTimer = null;
+    }
+
     const stationId = document.getElementById('etaStationSelect').value;
     const listArea = document.getElementById('etaList');
     if (!stationId || !listArea) return;
-    
-    listArea.innerHTML = "<div style='text-align:center; padding:20px; color:grey;'>載入中...</div>";
     
     try {
         const response = await fetch(`https://lrtapi.lightcatcube.com/api/schedule?station_id=${stationId}`);
         const data = await response.json();
         
-        console.log("API Data:", data); // 在瀏覽器 Console 查看原始數據
-
         if (data && data.platform_list) {
             let html = "";
+            
+            // 建立 [車序 -> 編組] 對照表
+            const runToCompMap = {};
+            Object.values(window.reportGroups).forEach(group => {
+                if (group.traces && group.traces.length > 0) {
+                    const latest = group.traces[0];
+                    const rnoKey = parseInt(latest.rno).toString(); 
+                    runToCompMap[rnoKey] = latest.fullId || group.carId;
+                }
+            });
+
             data.platform_list.forEach(platform => {
                 if (platform.route_list && platform.route_list.length > 0) {
                     html += `<div class="eta-platform-label">${platform.platform_id} 號月台</div>`;
                     
                     platform.route_list.forEach(train => {
-                        // 1. 取得原始車次 (確保轉換為字串)
                         let raw = "";
                         if (train.trip_no) raw = String(train.trip_no);
                         else if (train.train_id && train.train_id !== "0") raw = String(train.train_id);
 
-                        // 2. 核心邏輯：切除最後兩位
-                        // 20338 (5位) -> 203
-                        // 5321 (4位) -> 53
                         let runNo = "---";
+                        let matchedComp = "";
+
                         if (raw && raw.length > 2) {
                             runNo = raw.substring(0, raw.length - 2);
+                            const cleanRunNo = parseInt(runNo).toString();
+                            if (runToCompMap[cleanRunNo]) {
+                                // 將匹配到的編組放在目的地/卡數之後
+                                matchedComp = `<span style="margin-left:5px; color:#2980b9; font-weight:bold; font-size:0.85em;">(${runToCompMap[cleanRunNo]})</span>`;
+                            }
                         } else if (raw) {
-                            runNo = raw; // 少於等於2位則直接顯示
+                            runNo = raw;
                         }
 
                         const timeDiff = train.time_ch || "---";
                         const isApproaching = train.time_en === 'Arriving' || parseInt(train.time_en) <= 1;
-                        const carIcon = train.train_length === 2 ? " [2]" : "";
+                        const carIcon = train.train_length === 2 ? " [2]" : " [1]"; // 顯示列車卡數
                         const routeColor = colorMap[train.route_no] || '#333';
                         
+                        // 依照新模式排列：車序 路線 目的地+卡數+編組 分鐘
                         html += `
                         <div class="eta-item">
                             <div style="display:flex; align-items:center; gap:8px; overflow: hidden; flex: 1;">
                                 <span class="run-no-badge">${runNo}</span>
                                 <span class="route-badge" style="background:${routeColor}">${train.route_no}</span>
                                 <div style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight:bold; font-size: 0.95em;">
-                                    ${train.dest_ch}${carIcon}
+                                    ${train.dest_ch}${carIcon}${matchedComp}
                                 </div>
                             </div>
-                            <div class="eta-time ${isApproaching ? 'approaching' : ''}" style="margin-left: 10px; flex-shrink: 0;">${timeDiff}</div>
+                            <div class="eta-time ${isApproaching ? 'approaching' : ''}" style="margin-left: 10px; flex-shrink: 0;">
+                                ${timeDiff}
+                            </div>
                         </div>`;
                     });
                 }
             });
             listArea.innerHTML = html || "<div style='text-align:center; padding:20px; color:grey;'>目前沒有班次資訊</div>";
-        } else {
-            listArea.innerHTML = "<div style='text-align:center; padding:20px; color:grey;'>無法取得數據。</div>";
         }
     } catch (error) {
         console.error("Fetch Error:", error);
         listArea.innerHTML = "<div style='text-align:center; padding:20px; color:grey;'>網絡錯誤或數據異常。</div>";
+    }
+
+    if (document.getElementById('etaPage').classList.contains('active')) {
+        window.etaTimer = setTimeout(updateETAList, 10000); // 10秒自動刷新
     }
 }
 
