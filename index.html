@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>輕鐵行蹤報導站 Pro - Admin Linked 版</title>
+    <title>輕鐵行蹤</title>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -27,8 +27,8 @@
         const liveRef = ref(db, 'live_reports');
 
         // --- 管理員設定 ---
-        // 登入後在 Console (F12) 可以看到自己的 UID，將其填入下方
-        const ADMIN_UID = "AIzaSyBErRYvF2got2vrwY0-a8KSc8JVWKdeksQ"; 
+        // 請在此處填入您登入後在 Console 看到的 UID 字串
+        const ADMIN_UID = "在此填入您的_UID"; 
 
         window.db = db;
         window.user = null;
@@ -45,14 +45,13 @@
             const adminStatus = document.getElementById('adminStatus');
             
             if (user) {
-                console.log("Logged in UID:", user.uid); // 方便您複製 UID
+                console.log("您的 UID 是:", user.uid); 
                 loginBtn.innerText = `登出 (${user.displayName.split(' ')[0]})`;
                 loginBtn.onclick = window.logout;
 
-                // 檢查是否為管理員
                 if (user.uid === ADMIN_UID) {
                     window.isAdmin = true;
-                    adminStatus.innerText = "⭐ Admin Mode";
+                    adminStatus.innerText = "⭐ Admin";
                     adminStatus.style.color = "#f1c40f";
                 } else {
                     window.isAdmin = false;
@@ -100,7 +99,7 @@
         };
 
         window.deleteTrace = function(carId, timestamp) {
-            if(!window.isAdmin) return; // 二次驗證
+            if(!window.isAdmin) return;
             if(!confirm("確定要刪除此紀錄嗎？")) return;
             const nodeRef = ref(db, 'live_reports/' + carId);
             get(nodeRef).then(snap => {
@@ -124,9 +123,33 @@
     <style>
         :root { --mtr-red: #c0392b; --mtr-blue: #2980b9; --mtr-green: #27ae60; --mtr-dark: #34495e; --mtr-yellow: #f1c40f; }
         body { font-family: -apple-system, sans-serif; background: #f0f2f5; margin: 0; padding-bottom: 20px; }
-        .header { background: var(--mtr-red); color: white; padding: 15px; text-align: center; font-weight: bold; position: relative; display: flex; justify-content: space-between; align-items: center; }
-        #adminStatus { font-size: 0.7em; }
-        #loginBtn { background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 4px 8px; border-radius: 6px; font-size: 0.8em; cursor: pointer; }
+        
+        /* Header 背景改為 none */
+        .header { 
+            background: none; 
+            color: var(--mtr-dark); 
+            padding: 15px; 
+            text-align: center; 
+            font-weight: bold; 
+            position: relative; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+        }
+        
+        #adminStatus { font-size: 0.7em; margin-right: 5px; }
+        
+        /* 登入按鈕樣式調整以適應透明背景 */
+        #loginBtn { 
+            background: var(--mtr-red); 
+            border: none; 
+            color: white; 
+            padding: 6px 12px; 
+            border-radius: 6px; 
+            font-size: 0.8em; 
+            cursor: pointer; 
+        }
+
         .tabs { display: flex; background: white; border-bottom: 2px solid #ddd; position: sticky; top: 0; z-index: 100; }
         .tab-btn { flex: 1; padding: 15px; border: none; background: white; font-weight: bold; color: #7f8c8d; cursor: pointer; }
         .tab-btn.active { color: var(--mtr-red); border-bottom: 4px solid var(--mtr-red); }
@@ -138,10 +161,7 @@
         input, select { padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; }
         .timeline-card { background: white; border-radius: 12px; margin-bottom: 15px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.08); border-left: 6px solid var(--mtr-dark); }
         .timeline-header { padding: 12px 15px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; }
-        
-        /* 保持 Helvetica 字體 */
         .car-group-title { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: bold; font-size: 1.4em; }
-        
         .trace-item { padding: 8px 0; border-left: 2px solid #ddd; margin-left: 10px; padding-left: 15px; position: relative; }
         .trace-item::before { content: ""; width: 8px; height: 8px; background: #bbb; border-radius: 50%; position: absolute; left: -5px; top: 15px; }
         .trace-item.latest { border-left-color: var(--mtr-green); }
@@ -202,9 +222,7 @@
 </div>
 
 <script>
-// --- 此處省略其餘不變的渲染與數據邏輯，內容同上一版本 ---
-// [包含 colorMap, routeCfg, stationDB, renderAll, showCarHistory 等函數]
-// --- 基礎數據 ---
+// --- 數據與邏輯 ---
 const colorMap = { "505":"#D92329", "506P":"#000000", "507":"#00A551", "507P":"#00A551", "610":"#541B15", "614":"#541B15", "614P":"#541B15", "615":"#FFDD00", "615P":"#006585", "705":"#6EBF45", "706":"#B17AB5", "720":"#000000", "751":"#F48221", "751P":"#000000", "751L":"#F48221", "761P":"#6E2C91", "不載客":"#000000" };
 const routeCfg = { "505": ["三聖", "兆康"], "506P": ["兆康"], "507": ["田景", "屯門碼頭"], "507P": ["屯門碼頭"], "610": ["元朗", "屯門碼頭"], "614": ["元朗", "屯門碼頭"], "614P": ["兆康", "屯門碼頭"], "615": ["元朗", "屯門碼頭"], "615P": ["兆康", "屯門碼頭"], "705": ["天水圍循環綫", "天水圍"], "706": ["天水圍循環綫", "天水圍"], "720": ["天榮"], "751": ["友愛", "天逸"], "751P": ["天水圍", "天逸"], "751L": ["屯門碼頭"], "761P": ["元朗", "天逸"], "不載客": ["-"] };
 const stationDB = [{id:1, zh:"屯門碼頭", r:["506P","507","507P","610","614","614P","615","615P"]}, {id:10, zh:"美樂", r:["506P","610","615","615P"]}, {id:15, zh:"蝴蝶", r:["506P","610","615","615P"]}, {id:20, zh:"輕鐵車廠", r:["506P","610","615","615P"]}, {id:30, zh:"龍門", r:["506P","610","615","615P"]}, {id:40, zh:"青山村", r:["506P","610","615","615P"]}, {id:50, zh:"青雲", r:["506P","610","615","615P"]}, {id:60, zh:"建安", r:["505","506P"]}, {id:70, zh:"河田", r:["507","751"]}, {id:75, zh:"蔡意橋", r:["507","751"]}, {id:80, zh:"澤豐", r:["610","751"]}, {id:90, zh:"屯門醫院", r:["610","751"]}, {id:100, zh:"兆康", r:["505","506P","507P","610","614","614P","615","615P","720"]}, {id:110, zh:"麒麟", r:["505","615P"]}, {id:120, zh:"青松", r:["505","507P","615","615P"]}, {id:130, zh:"建生", r:["505","507P","615","615P"]}, {id:140, zh:"田景", r:["505","507","507P","615","615P"]}, {id:150, zh:"良景", r:["505","507","615","615P"]}, {id:160, zh:"新圍", r:["505","507","615","615P"]}, {id:170, zh:"石排", r:["505","610","615","615P"]}, {id:180, zh:"山景 (北)", r:["505"]}, {id:190, zh:"山景 (南)", r:["505"]}, {id:200, zh:"鳴琴", r:["505","610","615","615P"]}, {id:212, zh:"大興 (北)", r:["507","610"]}, {id:220, zh:"大興 (南)", r:["507","610"]}, {id:230, zh:"銀圍", r:["507","610"]}, {id:240, zh:"兆禧", r:["507","614","614P"]}, {id:250, zh:"屯門泳池", r:["507","614","614P"]}, {id:260, zh:"豐景園", r:["507","614","614P"]}, {id:265, zh:"兆麟", r:["505","507","614","614P"]}, {id:270, zh:"安定", r:["505","507","614","614P","751"]}, {id:275, zh:"友愛", r:["751"]}, {id:280, zh:"市中心", r:["505","507","614","614P","751"]}, {id:295, zh:"屯門", r:["505","506P","507","751"]}, {id:300, zh:"杯渡", r:["506P","614","614P"]}, {id:310, zh:"何福堂", r:["506P","614","614P"]}, {id:320, zh:"新墟", r:["506P","614","614P"]}, {id:330, zh:"景峰", r:["506P","614","614P"]}, {id:340, zh:"鳳地", r:["506P","614","614P"]}, {id:350, zh:"藍地", r:["610","614","615","720","751"]}, {id:360, zh:"泥圍", r:["610","614","615","720","751"]}, {id:370, zh:"鍾屋村", r:["610","614","615","720","751"]}, {id:380, zh:"洪水橋", r:["610","614","615","720","751"]}, {id:390, zh:"塘坊村", r:["610","614","615","761P"]}, {id:400, zh:"屏山", r:["610","614","615","761P"]}, {id:425, zh:"坑尾村", r:["751","761P"]}, {id:430, zh:"天水圍", r:["705","706","751","751P"]}, {id:435, zh:"天慈", r:["705","706","751","751P"]}, {id:445, zh:"天耀", r:["705","706","720","761P"]}, {id:448, zh:"樂湖", r:["705","706","720","761P"]}, {id:450, zh:"天湖", r:["705","706","751","751P"]}, {id:455, zh:"銀座", r:["705","706","751","751P"]}, {id:460, zh:"天瑞", r:["705","706","720","761P"]}, {id:468, zh:"頌富", r:["705","706","751","751P"]}, {id:480, zh:"天富", r:["705","706","751","751P"]}, {id:490, zh:"翠湖", r:["720","751","751P"]}, {id:500, zh:"天榮", r:["705","706","751","751P","761P"]}, {id:510, zh:"天悅", r:["705","706"]}, {id:520, zh:"天秀", r:["705","706"]}, {id:530, zh:"濕地公園", r:["705","706"]}, {id:540, zh:"天恒", r:["705","706"]}, {id:550, zh:"天逸", r:["705","706","751","751P"]}, {id:560, zh:"水邊圍", r:["610","614","615","761P"]}, {id:570, zh:"豐年路", r:["610","614","615","761P"]}, {id:580, zh:"康樂路", r:["610","614","615","761P"]}, {id:590, zh:"大棠路", r:["610","614","615","761P"]}, {id:600, zh:"元朗", r:["610","614","615","761P"]}, {id:920, zh:"三聖", r:["505"]}];
