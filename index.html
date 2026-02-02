@@ -900,80 +900,89 @@ window.showCarHistory = (cid, isSilent = false) => {
         return new Date(recordOpDateStr) >= rangeStart && new Date(recordOpDateStr) <= rangeEnd;
     });
 
-    let html = "";
+    let html = `
+        <div class="history-group" style="width: 100%;">
+            <div class="timeline-body expanded" style="
+                display: block; background: white; border-radius: 12px; 
+                margin: 0 10px 15px 10px; 
+                overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.08); 
+                border: 1px solid #eee;
+            ">
+                <div style="padding: 0;">`;
+
     let lastGroupKey = ""; 
 
-    filteredTraces.forEach((t, index) => {
-        const currentFid = t.fullId || cid;
-        const displayFid = currentFid.split('-').map(id => (specialIcons[id] || "") + id).join('-');
-        const recordOpDateStr = window.getOperationalDate(t.timestamp).replace(/-/g, '/');
-        const currentGroupKey = recordOpDateStr + "_" + displayFid;
+    if (filteredTraces.length === 0) {
+        html = `<div style='text-align:center; padding:40px; color:#bdc3c7;'>📭 七日內無報告</div>`;
+    } else {
+        filteredTraces.forEach((t) => {
+            const currentFid = t.fullId || cid;
+            const displayFid = currentFid.split('-').map(id => (specialIcons[id] || "") + id).join('-');
+            const recordOpDateStr = window.getOperationalDate(t.timestamp).replace(/-/g, '/');
+            const currentGroupKey = recordOpDateStr + "_" + displayFid;
 
-        if (currentGroupKey !== lastGroupKey) {
-            if (lastGroupKey !== "") html += `</div></div></div>`; 
+            if (currentGroupKey !== lastGroupKey) {
+                html += `
+                    <div style="
+                        background: transparent; 
+                        padding: 15px 0 8px 12px; 
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                        ${lastGroupKey !== "" ? "border-top: 1px solid #f2f2f2;" : ""}
+                    ">
+                        <span style="font-size: 0.72em; color: #7f8c8d; background: #ecf0f1; padding: 1px 8px; border-radius: 10px;">${recordOpDateStr}</span>
+                        <span style="font-size: 0.72em; color: #1a252f; font-weight: bold; background: #ecf0f1; padding: 1px 8px; border-radius: 10px; font-family: "Helvetica Neue", Arial, sans-serif; ">${displayFid}</span>
+                    </div>`;
+                lastGroupKey = currentGroupKey;
+            }
+
+            const rawRoute = t.rteKey || "";
+            let routeHTML = "";
+            let pureDest = processRouteDisplay(t.dRte);
+
+            if (rawRoute.includes('x')) {
+                const parts = rawRoute.split('x');
+                const c1 = colorMap[parts[0]] || '#333';
+                const c2 = colorMap[parts[1]] || '#333';
+                routeHTML = `<span class="route-badge" style="background:${c1}">${parts[0]}</span><span style="font-size: 0.7em; color: #999; margin: 0 1px;">→</span><span class="route-badge" style="background:${c2}">${parts[1]}</span>`;
+                pureDest = pureDest.replace(rawRoute, '').trim();
+            } else {
+                const c = colorMap[rawRoute] || '#333';
+                routeHTML = `<span class="route-badge" style="background:${c}">${rawRoute}</span>`;
+                pureDest = pureDest.replace(rawRoute, '').trim();
+            }
+
+            const hideToLabel = pureDest.includes("天水圍循環綫") || pureDest.includes("以天水圍為終點站") || rawRoute === "回廠" || pureDest === "---";
+            const toLabelHTML = hideToLabel ? "" : `<span style="font-size: 0.8em; color: #999; margin-left: 1px;">往</span>`;
+            pureDest = pureDest.replace(/^往\s*/, '').trim();
+            
+            const fullTimeStr = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+            const runNoAction = window.isAdmin ? `onclick="deleteTrace('${cid}', ${t.timestamp})"` : "";
+            const runNoStyle = window.isAdmin ? "cursor: pointer; border: 1px dashed #bdc3c7;" : "border: 1px solid #eee;";
 
             html += `
-                <div class="history-group" style="width: 100%;">
-                    <div style="margin: 15px 0 8px 12px; display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 0.72em; color: #7f8c8d; font-weight: bold; background: #ecf0f1; padding: 1px 8px; border-radius: 10px;">${recordOpDateStr}</span>
-                        <span style="font-size: 0.85em; color: #1a252f; font-weight: 800; background: #ecf0f1; padding: 1px 10px; border-radius: 10px;">${displayFid}</span>
+                <div class="trace-item" style="border-bottom: 1px solid #f2f2f2; padding: 10px 2px 10px 8px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 2px;">
+                        <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; flex: 1; min-width: 0;">
+                            <span class="run-no-badge" ${runNoAction} style="flex-shrink:0; font-size: 0.78em; padding: 1px 3px; ${runNoStyle}">${t.rno}</span>
+                            <div style="display: flex; align-items: center; flex-shrink:0;">${routeHTML}</div>
+                            ${toLabelHTML}
+                            <b style="font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${pureDest}</b>
+                            <span style="color: #999; font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 2;">@ ${t.loc}</span>
+                        </div>
+                        <small style="color: #2980b9; font-family: monospace; font-size: 0.75em; flex-shrink: 0; text-align: right; max-width: 50px;">
+                            ${fullTimeStr}
+                        </small>
                     </div>
-                    <div class="timeline-body expanded" style="
-                        display: block; background: white; border-radius: 12px; 
-                        margin: 0 10px 15px 10px; 
-                        overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.08); 
-                        border: 1px solid #eee;
-                    ">
-                        <div style="padding: 0;">`; 
-        }
+                    ${t.mem ? `<div style="font-size: 0.72em; color: #e67e22; padding-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: calc(100% - 2px);">📝 ${t.mem}</div>` : ''}
+                </div>`;
+        });
+        html += `</div></div></div>`;
+    }
 
-        lastGroupKey = currentGroupKey;
-
-        const rawRoute = t.rteKey || "";
-        let routeHTML = "";
-        let pureDest = processRouteDisplay(t.dRte);
-
-        if (rawRoute.includes('x')) {
-            const parts = rawRoute.split('x');
-            const c1 = colorMap[parts[0]] || '#333';
-            const c2 = colorMap[parts[1]] || '#333';
-            routeHTML = `<span class="route-badge" style="background:${c1}">${parts[0]}</span><span style="font-size: 0.7em; color: #999; margin: 0 1px;">→</span><span class="route-badge" style="background:${c2}">${parts[1]}</span>`;
-            pureDest = pureDest.replace(rawRoute, '').trim();
-        } else {
-            const c = colorMap[rawRoute] || '#333';
-            routeHTML = `<span class="route-badge" style="background:${c}">${rawRoute}</span>`;
-            pureDest = pureDest.replace(rawRoute, '').trim();
-        }
-
-        const hideToLabel = pureDest.includes("天水圍循環綫") || pureDest.includes("以天水圍為終點站") || rawRoute === "回廠" || pureDest === "---";
-        const toLabelHTML = hideToLabel ? "" : `<span style="font-size: 0.8em; color: #999; margin-left: 1px;">往</span>`;
-        pureDest = pureDest.replace(/^往\s*/, '').trim();
-        
-        const fullTimeStr = new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-        const runNoAction = window.isAdmin ? `onclick="deleteTrace('${cid}', ${t.timestamp})"` : "";
-        const runNoStyle = window.isAdmin ? "cursor: pointer; border: 1px dashed #bdc3c7;" : "border: 1px solid #eee;";
-
-        html += `
-            <div class="trace-item" style="border-bottom: 1px solid #f2f2f2; padding: 10px 2px 10px 8px; display: flex; flex-direction: column; gap: 4px; box-sizing: border-box;">
-                <div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 2px;">
-                    <div style="display: flex; align-items: center; gap: 4px; overflow: hidden; flex: 1; min-width: 0;">
-                        <span class="run-no-badge" ${runNoAction} style="flex-shrink:0; font-size: 0.78em; padding: 1px 3px; ${runNoStyle}">${t.rno}</span>
-                        <div style="display: flex; align-items: center; flex-shrink:0;">${routeHTML}</div>
-                        ${toLabelHTML}
-                        <b style="font-size: 0.88em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 1;">${pureDest}</b>
-                        <span style="color: #999; font-size: 0.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 2;">@ ${t.loc}</span>
-                    </div>
-                    <small style="color: #2980b9; font-family: monospace; font-size: 0.75em; flex-shrink: 0; text-align: right; max-width: 50px;">
-                        ${fullTimeStr}
-                    </small>
-                </div>
-                ${t.mem ? `<div style="font-size: 0.72em; color: #e67e22; padding-left: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: calc(100% - 2px);">📝 ${t.mem}</div>` : ''}
-            </div>`;
-    });
-
-    if (html !== "") html += `</div></div></div>`;
     detailListContainer.style.padding = "0px";
-    detailListContainer.innerHTML = html || `<div style='text-align:center; padding:40px; color:#bdc3c7;'>📭 七日內無報告</div>`;
+    detailListContainer.innerHTML = html;
 };
 
 window.closeDetail = () => {
@@ -2458,20 +2467,28 @@ async function updateETAList() {
 const resetBtn = document.getElementById('btnResetFilters');
 if (resetBtn) {
     resetBtn.addEventListener('click', () => {
-        // 1. 重置日期 (使用您現有的 getOperationalDate 函數)
-        if (typeof window.getOperationalDate === 'function') {
-            document.getElementById('searchDate').value = window.getOperationalDate();
+        // 1. 重置日期
+        const searchDate = document.getElementById('searchDate');
+        if (searchDate && typeof window.getOperationalDate === 'function') {
+            searchDate.value = window.getOperationalDate();
         }
         
         // 2. 重置路綫選單
-        document.getElementById('searchRoute').value = '';
+        const searchRoute = document.getElementById('searchRoute');
+        if (searchRoute) searchRoute.value = '';
         
-        // 3. 重置編組輸入
-        compInput.value = '';
-        clearBtn.style.display = 'none';
+        // 3. 重置編組輸入與清除按鈕
+        const compInput = document.getElementById('searchComp');
+        const clearBtn = document.getElementById('clearSearch');
+        if (compInput) {
+            compInput.value = '';
+            compInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        if (clearBtn) clearBtn.style.display = 'none';
         
         // 4. 重置排序
-        document.getElementById('sortOrder').value = 'reportTime';
+        const sortOrder = document.getElementById('sortOrder');
+        if (sortOrder) sortOrder.value = 'reportTime';
         
         // 5. 執行重新渲染
         if (typeof window.renderAll === 'function') {
@@ -2511,11 +2528,11 @@ window.showETAMenu = function(location, route, dest, runNo, carId) {
                 ${carId} ${route} (${runNo}) 往 ${dest} － 請選擇
             </div>
             
-            <button onclick="handleETAAciton('trace', '${carId}')" style="width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 12px; border: none; background: #f0f7ff; color: #007aff; font-size: 1.05em; font-weight: 600; cursor: pointer; display: ${carId ? 'block' : 'none'};">
+            <button onclick="handleETAAciton('trace', '${carId}')" style="width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 12px; border: 1px solid #007aff; background: #f0f7ff; color: #007aff; font-size: 1.05em; font-weight: 600; cursor: pointer; text-align: center; display: ${carId ? 'block' : 'none'};">
                 🔍 查詢車編行蹤
             </button>
 
-            <button onclick="handleETAAciton('report', '${location}', '${route}', '${dest}', '${runNo}', '${carId}')" style="width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 12px; border: none; background: #f0fff4; color: #28a745; font-size: 1.05em; font-weight: 600; cursor: pointer;">
+            <button onclick="handleETAAciton('report', '${location}', '${route}', '${dest}', '${runNo}', '${carId}')" style="width: 100%; padding: 16px; margin-bottom: 10px; border-radius: 12px; border: 1px solid #007aff; background: #f0f7ff; color: #007aff; font-size: 1.05em; font-weight: 600; cursor: pointer; text-align: center;">
                 📝 更新車序行蹤
             </button>
 
