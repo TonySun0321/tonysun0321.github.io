@@ -224,24 +224,26 @@ window.publishToFirebase = function(inputIds, newTrace) {
     const fullId = inputIds.toString().replace(/\s+/g, '');
     const carIds = fullId.split('-');
     
-    // 驗證單一車卡狀態
+    // 1. 驗證單一車卡狀態
     for (let id of carIds) {
         if (!id) continue;
         const status = checkCarStatus(id);
         if (!status.valid) { 
-            alert(status.msg); 
+            // 修改處：將 alert 改為 showToast
+            window.showToast(status.msg); 
             return; 
         }
     }
 
-    // 驗證編組合法性（例如 12XX 拖卡不能單獨行駛）
+    // 2. 驗證編組合法性
     const compStatus = validateComposition(carIds);
     if (!compStatus.valid) { 
-        alert(compStatus.msg); 
+        // 修改處：將 alert 改為 showToast
+        window.showToast(compStatus.msg); 
         return; 
     }
 
-    // 針對 Phase 1 車輛行駛 705 綫的特殊提示
+    // 3. 針對 Phase 1 車輛行駛 705 綫的特殊提示 (這部分通常仍建議用 confirm 或自訂 Modal)
     const hasPhase1 = carIds.some(id => parseInt(id) >= 1001 && parseInt(id) <= 1090);
     if (hasPhase1 && newTrace.rteKey === "705") {
         if (!confirm("提示：請確認相關行蹤報道是否正確？")) return;
@@ -252,12 +254,10 @@ window.publishToFirebase = function(inputIds, newTrace) {
         if (!carId) return;
         const nodeRef = ref(db, 'live_reports/' + carId);
         
-        // 使用 get 獲取現有數據，然後更新 traces 列表
         return get(nodeRef).then(snap => {
             let group = snap.val() || { carId: carId, traces: [] };
             if (!Array.isArray(group.traces)) group.traces = [];
             
-            // 將新記錄插入最前面，並限制最多儲存 50 條
             group.traces.unshift({ ...newTrace, fullId: fullId, timestamp: now });
             group.traces = group.traces.slice(0, 50);
             
@@ -268,110 +268,109 @@ window.publishToFirebase = function(inputIds, newTrace) {
     Promise.all(promises)
     .then(() => {
         window.showToast("提交成功！");
-
-        // --- 新增：提交後嘗試靜默刷新詳情頁 ---
         const overlay = document.getElementById('detailOverlay');
-        // 檢查詳情頁是否開啟，且開啟的是否為剛剛回報的其中一台車
         if (overlay && overlay.style.display === 'flex' && carIds.includes(window.currentDetailCarId)) {
             window.showCarHistory(window.currentDetailCarId, true); 
         }
     })
     .catch(e => {
         console.error("提交失敗:", e);
-        alert("提交失敗: " + e.message);
+        // 這裡已經是使用 showMenuAlert
+        window.showToast("提交失敗: " + e.message);
     });
 };
 
 window.deleteTrace = async function(carId, timestamp) {
-    if (!window.user) {
-        alert("請先登入");
-        return;
+    if (!window.user) { 
+        window.showToast("請先登入"); 
+        return; 
+    }
+    if (!window.isAdmin) { 
+        window.showToast("權限不足：您不是管理員"); 
+        return; 
     }
 
-    if (!window.isAdmin) {
-        alert("權限不足：您不是管理員，無法執行刪除操作。");
-        return;
-    }
+    // 呼叫 904 樣式的通用選單
+    showActionSheet({
+        title: `<b style="color: #ff3b30; font-size: 1.1em;">⚠️ 確定要刪除這條記錄嗎？</b><br><span style="font-size: 0.85em; color: #888;">(若為拖卡編組記錄將會同步清除)</span>`,
+        buttons: [
+            {
+                text: "刪除",
+                danger: true,
+                onClick: async () => {
+                    // 確保在 onClick 內部可以存取 Firebase 的方法
+                    // 如果你的 script 是 type="module"，請確保 db, ref, get, set 已經定義在全域或從上方引入
+                    try {
+                        // 1. 取得主車資料庫紀錄
+                        const primaryCarRef = ref(db, `live_reports/${carId}`);
+                        const primarySnap = await get(primaryCarRef);
+                        
+                        if (!primarySnap.exists()) {
+                            window.showToast('找不到該車輛資料');
+                            return;
+                        }
 
-    if (!confirm('確定要刪除這條記錄嗎？\n(若為編組紀錄將會同步清除)')) return;
+                        let primaryData = primarySnap.val();
+                        const targetTrace = (primaryData.traces || []).find(t => t.timestamp === timestamp);
 
-    try {
-        // 1. 取得主車資料庫紀錄，確認該筆紀錄是否存在及 fullId
-        const primaryCarRef = ref(db, `live_reports/${carId}`);
-        const primarySnap = await get(primaryCarRef);
-        
-        if (!primarySnap.exists()) {
-            alert('找不到該車輛資料');
-            return;
-        }
+                        if (!targetTrace) {
+                            window.showToast('找不到該條記錄');
+                            return;
+                        }
 
-        let primaryData = primarySnap.val();
-        const targetTrace = (primaryData.traces || []).find(t => t.timestamp === timestamp);
+                        // 2. 判斷是否為編組
+                        let carIdsToUpdate = [carId];
+                        if (targetTrace.fullId && targetTrace.fullId.includes('-')) {
+                            carIdsToUpdate = targetTrace.fullId.split('-');
+                        }
 
-        if (!targetTrace) {
-            alert('找不到該條記錄，可能已被刪除');
-            return;
-        }
+                        // 3. 執行批次更新
+                        const deletePromises = carIdsToUpdate.map(async (id) => {
+                            const carRef = ref(db, `live_reports/${id}`);
+                            const snap = await get(carRef);
+                            if (snap.exists()) {
+                                let data = snap.val();
+                                if (data.traces && Array.isArray(data.traces)) {
+                                    const newTraces = data.traces.filter(t => t.timestamp !== timestamp);
+                                    if (newTraces.length !== data.traces.length) {
+                                        data.traces = newTraces;
+                                        return set(carRef, data);
+                                    }
+                                }
+                            }
+                            return Promise.resolve();
+                        });
 
-        // 2. 判斷是否為編組 (fullId 包含 '-')，決定需要同步清理的所有車號
-        let carIdsToUpdate = [carId];
-        if (targetTrace.fullId && targetTrace.fullId.includes('-')) {
-            carIdsToUpdate = targetTrace.fullId.split('-');
-        }
+                        await Promise.all(deletePromises);
 
-        // 3. 執行資料庫批次更新 (Firebase)
-        const deletePromises = carIdsToUpdate.map(async (id) => {
-            const carRef = ref(db, `live_reports/${id}`);
-            const snap = await get(carRef);
-            if (snap.exists()) {
-                let data = snap.val();
-                if (data.traces && Array.isArray(data.traces)) {
-                    const originalCount = data.traces.length;
-                    const newTraces = data.traces.filter(t => t.timestamp !== timestamp);
-                    
-                    // 只有當數量有變動時才寫回資料庫
-                    if (newTraces.length !== originalCount) {
-                        data.traces = newTraces;
-                        return set(carRef, data);
+                        // 4. 更新本地緩存
+                        carIdsToUpdate.forEach(id => {
+                            if (window.reportGroups && window.reportGroups[id] && Array.isArray(window.reportGroups[id].traces)) {
+                                window.reportGroups[id].traces = window.reportGroups[id].traces.filter(t => t.timestamp !== timestamp);
+                            }
+                        });
+
+                        // 5. 刷新介面
+                        if (document.getElementById('detailOverlay')?.style.display === 'flex') {
+                            if (typeof window.showCarHistory === 'function') {
+                                window.showCarHistory(window.currentDetailCarId, true);
+                            }
+                        }
+                        
+                        if (typeof window.renderAll === 'function') {
+                            window.renderAll();
+                        }
+
+                        window.showToast('記錄已同步刪除');
+
+                    } catch (error) {
+                        console.error("Delete Error:", error);
+                        window.showToast('刪除失敗：' + error.message);
                     }
                 }
             }
-            return Promise.resolve();
-        });
-
-        await Promise.all(deletePromises);
-
-        // 4. 安全地更新本地緩存數據 (避免 filter 報錯)
-        carIdsToUpdate.forEach(id => {
-            if (window.reportGroups && window.reportGroups[id] && Array.isArray(window.reportGroups[id].traces)) {
-                window.reportGroups[id].traces = window.reportGroups[id].traces.filter(t => t.timestamp !== timestamp);
-            }
-        });
-
-        // 5. 渲染介面邏輯 (防止自動彈出)
-        const overlay = document.getElementById('detailOverlay');
-        // 檢查詳情頁當前是否真的在顯示中
-        const isOverlayVisible = overlay && (overlay.style.display === 'flex');
-
-        if (isOverlayVisible) {
-            // 如果分頁原本就是開著的，則執行「靜默更新」，傳入 true 參數
-            // 注意：這需要配合我上次提供給您的 showCarHistory(cid, isSilent) 版本
-            if (typeof window.showCarHistory === 'function') {
-                window.showCarHistory(window.currentDetailCarId, true);
-            }
-        }
-        
-        // 更新主頁面列表
-        if (typeof window.renderAll === 'function') {
-            window.renderAll();
-        }
-
-        window.showToast('記錄已同步刪除');
-
-    } catch (error) {
-        console.error("Delete Error:", error);
-        alert('刪除失敗：' + error.message);
-    }
+        ]
+    });
 };
 
 		const initApp = () => {
@@ -1894,6 +1893,49 @@ function show904Menu() {
 
     document.getElementById('run-cancel-btn').onclick = close;
 }
+
+
+function showActionSheet(config) {
+    const existing = document.getElementById('run-action-sheet');
+    if (existing) existing.remove();
+
+    const html = `
+    <div id="run-action-sheet" class="action-sheet-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 10001; display: flex; align-items: flex-end;">
+        <div class="action-sheet-content" onclick="event.stopPropagation()" style="width: 100%; background: #fff; border-radius: 20px 20px 0 0; padding: 20px; box-sizing: border-box; width: 100%;">
+            <div style="text-align: center; margin-bottom: 20px; color: #333; font-size: 1.05em; line-height: 1.5;">
+                ${config.title}
+            </div>
+            
+            ${config.buttons.map((btn, index) => `
+                <button id="sheet-btn-${index}" style="width: 100%; padding: 16px; margin-bottom: ${index === config.buttons.length - 1 ? '20px' : '10px'}; border-radius: 12px; border: ${btn.primary ? '1px solid #007aff' : 'none'}; background: ${btn.primary ? '#f0f7ff' : '#f5f5f5'}; color: ${btn.danger ? '#ff3b30' : (btn.primary ? '#007aff' : '#333')}; font-size: 1.05em; font-weight: 600; cursor: pointer; text-align: center;">
+                    ${btn.text}
+                </button>
+            `).join('')}
+
+            <button id="run-cancel-btn" style="width: 100%; padding: 16px; border-radius: 12px; border: none; background: #eee; color: #333; font-size: 1.05em; cursor: pointer;">
+                取消
+            </button>
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    const close = () => {
+        const sheet = document.getElementById('run-action-sheet');
+        if (sheet) sheet.remove();
+    };
+
+    document.getElementById('run-action-sheet').onclick = close;
+    document.getElementById('run-cancel-btn').onclick = close;
+
+    config.buttons.forEach((btn, index) => {
+        document.getElementById(`sheet-btn-${index}`).onclick = () => {
+            btn.onClick();
+            close();
+        };
+    });
+}
+
 
 /**
  * 輔助：設定特殊路線選項
